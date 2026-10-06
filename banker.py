@@ -587,6 +587,22 @@ def set_gamerules() -> None:
         input()
         set_gamerules()
 
+def send_monopoly_turn_notif(message: str) -> bool:
+    """
+    Sends the current player the game board + turn notification.
+    Returns False if the current player is disconnected.
+    """
+    current_client = clients[mply.turn]
+
+    try:
+        net.send_notif(current_client.socket, mply.get_gameboard() + ss.set_cursor_str(0, 38) + message, "MPLY:")
+        current_client.can_roll = True
+        add_to_output_area("Monopoly", f"Player turn: {mply.turn}. Sent gameboard to {current_client.name}.")
+        return True
+    except OSError:
+        add_to_output_area("Monopoly", f"Player turn: {mply.turn}. {current_client.name} has disconnected.", COLORS.RED)
+        return False
+
 def monopoly_controller(unit_test) -> None:
     """
     Controls the flow of the Monopoly game.
@@ -610,22 +626,17 @@ def monopoly_controller(unit_test) -> None:
         print("Error: Monopoly game not started.")
         return
     sleep(5) # Temporary sleep to give all players time to connect to the receiver TODO remove this and implement a better way to check all are connected to rcvr
-    net.send_notif(clients[mply.turn].socket, mply.get_gameboard() + ss.set_cursor_str(0, 38) + "Welcome to Monopoly! It's your turn. Type roll to roll the dice.", "MPLY:")
-    add_to_output_area("Monopoly", "Sent gameboard to player 0.")
-    last_turn = 0
+    last_turn = None
+    first_turn = True
     while True:
         sleep(1)
         if mply.turn != last_turn:
-            # if disconnect, move to next player
-            try:
-                ss.set_cursor(0, 20)
-                last_turn = mply.turn
-                net.send_notif(clients[mply.turn].socket, mply.get_gameboard() + ss.set_cursor_str(0, 38) + "It's your turn. Type roll to roll the dice.", "MPLY:")
-                clients[mply.turn].can_roll = True
-                # ss.set_cursor(ss.MONOPOLY_OUTPUT_COORDINATES[0]+1, ss.MONOPOLY_OUTPUT_COORDINATES[1]+1)
-                add_to_output_area("Monopoly", f"Player turn: {mply.turn}. Sent gameboard to {clients[mply.turn].name}.")
-            except:
-                add_to_output_area("Monopoly", f"Player turn: {mply.turn}. Disconnected")
+            ss.set_cursor(0, 20)
+            current_turn = mply.turn
+            message = ("Welcome to Monopoly! It's your turn. Type roll to roll the dice." if first_turn else "It's your turn. Type roll to roll the dice.")
+            first_turn = False
+            last_turn = current_turn
+            if not send_monopoly_turn_notif(message):
                 mply.end_turn()
 def monopoly_game(client: Client = None, cmd: str = None) -> None:
     """
